@@ -52,7 +52,26 @@ impl YahooConnector {
             symbol = ticker,
             start = start.unix_timestamp(),
             end = end.unix_timestamp(),
-            interval = interval
+            interval = interval,
+        );
+        YResponse::from_json(self.send_request(&url).await?)
+    }
+
+    /// Retrieve the quote history for the given ticker for a given period and ticker interval and optionally before and after regular trading hours
+    pub async fn get_quote_period_interval(
+        &self,
+        ticker: &str,
+        period: &str,
+        interval: &str,
+        prepost: bool,
+    ) -> Result<YResponse, YahooError> {
+        let url = format!(
+            YCHART_PERIOD_INTERVAL_QUERY!(),
+            url = self.url,
+            symbol = ticker,
+            period = period,
+            interval = interval,
+            prepost = prepost,
         );
         YResponse::from_json(self.send_request(&url).await?)
     }
@@ -162,6 +181,15 @@ mod tests {
     }
 
     #[test]
+    fn test_get_metadata() {
+        let provider = YahooConnector::new();
+        let response =
+            tokio_test::block_on(provider.get_quote_range("HNL.DE", "1d", "1mo")).unwrap();
+        let metadata = response.metadata().unwrap();
+        assert_eq!(metadata.symbol, "HNL.DE");
+    }
+
+    #[test]
     fn test_get() {
         let provider = YahooConnector::new();
 
@@ -256,5 +284,17 @@ mod tests {
         assert_eq!(&response.chart.result[0].meta.symbol, "VTSAX");
         assert_eq!(&response.chart.result[0].meta.range, "1mo");
         assert_eq!(&response.chart.result[0].meta.data_granularity, "1d");
+    }
+
+    #[test]
+    fn test_mutual_fund_capital_gains() {
+        let provider = YahooConnector::new();
+        let response = tokio_test::block_on(provider.get_quote_range("AMAGX", "1d", "5y")).unwrap();
+
+        assert_eq!(&response.chart.result[0].meta.symbol, "AMAGX");
+        assert_eq!(&response.chart.result[0].meta.range, "5y");
+        assert_eq!(&response.chart.result[0].meta.data_granularity, "1d");
+        let capital_gains = response.capital_gains().unwrap();
+        assert!(capital_gains.len() > 0usize);
     }
 }
